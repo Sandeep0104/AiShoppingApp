@@ -6,6 +6,7 @@ import { useState, useEffect } from 'react';
 export default function Navbar() {
     const { data: session } = useSession();
     const [cartCount, setCartCount] = useState(0);
+    const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
     useEffect(() => {
         if (session?.user?.id) {
@@ -37,25 +38,25 @@ export default function Navbar() {
     return (
         <nav className="navbar">
             <div className="navbar-inner">
-                <Link href="/" className="navbar-logo">
+                <Link href="/" className="navbar-logo" onClick={() => setIsMobileMenuOpen(false)}>
                     <span className="navbar-logo-icon">🛍️</span>
                     ShopAI
                 </Link>
 
-                <div className="navbar-links">
-                    <Link href="/" className="navbar-link">Home</Link>
-                    <Link href="/products" className="navbar-link">Products</Link>
+                <div className={`navbar-links ${isMobileMenuOpen ? 'active' : ''}`}>
+                    <Link href="/" className="navbar-link" onClick={() => setIsMobileMenuOpen(false)}>Home</Link>
+                    <Link href="/products" className="navbar-link" onClick={() => setIsMobileMenuOpen(false)}>Products</Link>
                     {session && (
-                        <Link href="/dashboard" className="navbar-link">Dashboard</Link>
+                        <Link href="/dashboard" className="navbar-link" onClick={() => setIsMobileMenuOpen(false)}>Dashboard</Link>
                     )}
                     {session?.user?.role === 'admin' && (
-                        <Link href="/admin" className="navbar-link">Admin</Link>
+                        <Link href="/admin" className="navbar-link" onClick={() => setIsMobileMenuOpen(false)}>Admin</Link>
                     )}
                 </div>
 
                 <div className="navbar-auth">
                     {session && (
-                        <Link href="/cart" className="navbar-cart">
+                        <Link href="/cart" className="navbar-cart" onClick={() => setIsMobileMenuOpen(false)}>
                             🛒
                             {cartCount > 0 && (
                                 <span className="navbar-cart-count">{cartCount}</span>
@@ -65,9 +66,9 @@ export default function Navbar() {
 
                     {session ? (
                         <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                            <span className="navbar-user">👤 {session.user.name}</span>
+                            <span className="navbar-user" style={{ display: isMobileMenuOpen ? 'none' : 'flex' }}>👤 {session.user.name.split(' ')[0]}</span>
                             <button
-                                className="btn btn-ghost btn-sm"
+                                className="btn btn-ghost btn-sm logout-btn"
                                 onClick={() => signOut({ callbackUrl: '/' })}
                             >
                                 Logout
@@ -76,9 +77,17 @@ export default function Navbar() {
                     ) : (
                         <div style={{ display: 'flex', gap: '8px' }}>
                             <Link href="/login" className="btn btn-secondary btn-sm">Login</Link>
-                            <Link href="/register" className="btn btn-primary btn-sm">Sign Up</Link>
+                            <Link href="/register" className="btn btn-primary btn-sm signup-btn">Sign Up</Link>
                         </div>
                     )}
+
+                    <button
+                        className="mobile-menu-toggle"
+                        onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+                        aria-label="Toggle Menu"
+                    >
+                        {isMobileMenuOpen ? '✕' : '☰'}
+                    </button>
                 </div>
             </div>
         </nav>
