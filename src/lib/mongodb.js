@@ -1,8 +1,4 @@
 import mongoose from 'mongoose';
-import dns from 'dns';
-
-// Force Google DNS to bypass network restrictions on MongoDB Atlas SRV lookups
-dns.setServers(['8.8.8.8', '8.8.4.4']);
 
 const MONGODB_URI = process.env.MONGODB_URI;
 
