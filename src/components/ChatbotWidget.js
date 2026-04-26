@@ -3,14 +3,14 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { useSession } from 'next-auth/react';
 import Link from 'next/link';
 
-// Generate a stable sessionId per browser tab/session
+// Generate a stable sessionId per browser
 function getSessionId() {
     if (typeof window === 'undefined') return null;
     const key = 'shopai_session_id';
-    let id = sessionStorage.getItem(key);
+    let id = localStorage.getItem(key);
     if (!id) {
         id = `sess_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
-        sessionStorage.setItem(key, id);
+        localStorage.setItem(key, id);
     }
     return id;
 }
@@ -18,7 +18,15 @@ function getSessionId() {
 export default function ChatbotWidget() {
     const { data: session } = useSession();
     const [isOpen, setIsOpen] = useState(false);
-    const [messages, setMessages] = useState([]);
+    const [messages, setMessages] = useState(() => {
+        if (typeof window !== 'undefined') {
+            const saved = localStorage.getItem('shopai_chat_history');
+            if (saved) {
+                try { return JSON.parse(saved); } catch (e) {}
+            }
+        }
+        return [];
+    });
     const [input, setInput] = useState('');
     const [loading, setLoading] = useState(false);
     const [thinkingSteps, setThinkingSteps] = useState([]);
@@ -38,6 +46,23 @@ export default function ChatbotWidget() {
         }
     }, [isOpen, session]);
 
+    // Persist messages to localStorage and listen for cross-tab changes
+    useEffect(() => {
+        if (messages.length > 0) {
+            localStorage.setItem('shopai_chat_history', JSON.stringify(messages));
+        }
+    }, [messages]);
+
+    useEffect(() => {
+        const handleStorage = (e) => {
+            if (e.key === 'shopai_chat_history' && e.newValue) {
+                try { setMessages(JSON.parse(e.newValue)); } catch (e) {}
+            }
+        };
+        window.addEventListener('storage', handleStorage);
+        return () => window.removeEventListener('storage', handleStorage);
+    }, []);
+
     // Set the welcome message based on login state
     useEffect(() => {
         if (!session) {
@@ -46,11 +71,18 @@ export default function ChatbotWidget() {
                 content: null,
                 isLoginPrompt: true,
             }]);
+            localStorage.removeItem('shopai_chat_history');
         } else {
-            setMessages([{
-                role: 'bot',
-                content: `👋 Welcome back, **${session.user.name.split(' ')[0]}**! I'm your AI shopping assistant.\n\nI remember our previous conversations and learn your preferences over time. How can I help you today?`,
-            }]);
+            setMessages(prev => {
+                // Only set welcome message if chat is empty or currently showing login prompt
+                if (prev.length === 0 || prev[0].isLoginPrompt) {
+                    return [{
+                        role: 'bot',
+                        content: `👋 Welcome back, **${session.user.name.split(' ')[0]}**! I'm your AI shopping assistant.\n\nI remember our previous conversations and learn your preferences over time. How can I help you today?`,
+                    }];
+                }
+                return prev;
+            });
         }
     }, [session]);
 
