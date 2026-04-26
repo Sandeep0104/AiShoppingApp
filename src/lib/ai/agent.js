@@ -79,7 +79,7 @@ export async function runAgent({ userId, userMessage, historyMessages, behaviorP
     // Loop up to 5 tool rounds (prevents infinite loops)
     for (let round = 0; round < 5; round++) {
         const response = await groq.chat.completions.create({
-            model: 'llama-3.3-70b-versatile',
+            model: 'llama-3.1-8b-instant',
             messages: messages,
             tools: groqToolDeclarations,
             tool_choice: 'auto',
