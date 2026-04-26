@@ -6,7 +6,7 @@ import Link from 'next/link';
 // Generate a stable sessionId per browser
 function getSessionId() {
     if (typeof window === 'undefined') return null;
-    const key = 'shopai_session_id';
+    const key = 'bazario_session_id';
     let id = localStorage.getItem(key);
     if (!id) {
         id = `sess_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
@@ -20,7 +20,7 @@ export default function ChatbotWidget() {
     const [isOpen, setIsOpen] = useState(false);
     const [messages, setMessages] = useState(() => {
         if (typeof window !== 'undefined') {
-            const saved = localStorage.getItem('shopai_chat_history');
+            const saved = localStorage.getItem('bazario_chat_history');
             if (saved) {
                 try { return JSON.parse(saved); } catch (e) {}
             }
@@ -49,13 +49,13 @@ export default function ChatbotWidget() {
     // Persist messages to localStorage and listen for cross-tab changes
     useEffect(() => {
         if (messages.length > 0) {
-            localStorage.setItem('shopai_chat_history', JSON.stringify(messages));
+            localStorage.setItem('bazario_chat_history', JSON.stringify(messages));
         }
     }, [messages]);
 
     useEffect(() => {
         const handleStorage = (e) => {
-            if (e.key === 'shopai_chat_history' && e.newValue) {
+            if (e.key === 'bazario_chat_history' && e.newValue) {
                 try { setMessages(JSON.parse(e.newValue)); } catch (e) {}
             }
         };
@@ -71,7 +71,7 @@ export default function ChatbotWidget() {
                 content: null,
                 isLoginPrompt: true,
             }]);
-            localStorage.removeItem('shopai_chat_history');
+            localStorage.removeItem('bazario_chat_history');
         } else {
             setMessages(prev => {
                 // Only set welcome message if chat is empty or currently showing login prompt
@@ -162,7 +162,7 @@ export default function ChatbotWidget() {
                         <div className="chatbot-header-info">
                             <div className="chatbot-header-avatar">🤖</div>
                             <div>
-                                <h3>ShopAI Assistant</h3>
+                                <h3>Bazario Assistant</h3>
                                 <p>{session ? 'Gemini AI • Learns your preferences' : 'Login required'}</p>
                             </div>
                         </div>
@@ -179,7 +179,7 @@ export default function ChatbotWidget() {
                                         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                                             <p>🔐 <strong>Login required</strong></p>
                                             <p style={{ fontSize: '0.85rem', opacity: 0.85 }}>
-                                                The ShopAI assistant is personalized for each user. Please log in to start chatting, get recommendations, and manage your cart.
+                                                The Bazario assistant is personalized for each user. Please log in to start chatting, get recommendations, and manage your cart.
                                             </p>
                                             <div style={{ display: 'flex', gap: '8px' }}>
                                                 <Link href="/login" className="btn btn-primary btn-sm" onClick={() => setIsOpen(false)}>

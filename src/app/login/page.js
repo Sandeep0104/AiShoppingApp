@@ -34,7 +34,7 @@ export default function LoginPage() {
         <div className="auth-page">
             <form className="auth-form" onSubmit={handleSubmit}>
                 <h1>Welcome Back 👋</h1>
-                <p className="subtitle">Login to your ShopAI account</p>
+                <p className="subtitle">Login to your Bazario account</p>
 
                 <div className="form-group">
                     <label>Email Address</label>

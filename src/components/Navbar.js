@@ -40,7 +40,7 @@ export default function Navbar() {
             <div className="navbar-inner">
                 <Link href="/" className="navbar-logo" onClick={() => setIsMobileMenuOpen(false)}>
                     <span className="navbar-logo-icon">🛍️</span>
-                    ShopAI
+                    Bazario
                 </Link>
 
                 <div className={`navbar-links ${isMobileMenuOpen ? 'active' : ''}`}>

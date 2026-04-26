@@ -20,7 +20,7 @@ export async function POST(request) {
         // ── Auth guard ──────────────────────────────────────────────────────
         if (!userId) {
             return NextResponse.json({
-                reply: '🔐 Please **log in** to chat with ShopAI. Your conversations and recommendations are personalized just for you!',
+                reply: '🔐 Please **log in** to chat with Bazario. Your conversations and recommendations are personalized just for you!',
                 action: 'require_login',
             });
         }

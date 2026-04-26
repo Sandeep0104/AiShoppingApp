@@ -1,4 +1,4 @@
-// ShopAI Agent — Powered by Groq (Llama 3 70B) with Native Function Calling
+// Bazario Agent — Powered by Groq (Llama 3 70B) with Native Function Calling
 // Uses groq-sdk
 
 import Groq from 'groq-sdk';
@@ -9,7 +9,7 @@ import { buildBehaviorPrompt } from './memory';
 function buildSystemPrompt(behaviorProfile) {
     const behaviorBlock = buildBehaviorPrompt(behaviorProfile);
 
-    return `You are ShopAI, an intelligent and friendly AI shopping assistant for an online e-commerce store.
+    return `You are Bazario, an intelligent and friendly AI shopping assistant for an online e-commerce store.
 
 You have access to tools that can:
 • Search for products by keyword, category, price, or rating

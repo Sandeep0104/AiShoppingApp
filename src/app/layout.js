@@ -4,8 +4,8 @@ import Navbar from '@/components/Navbar';
 import ChatbotWidget from '@/components/ChatbotWidget';
 
 export const metadata = {
-  title: 'ShopAI - AI-Powered Shopping Assistant',
-  description: 'Discover products with our intelligent AI shopping assistant. Features NLP-based recommendations, sentiment-analyzed reviews, and a smart chatbot.',
+  title: 'Bazario - Premium Shopping Assistant',
+  description: 'AI-powered e-commerce platform with smart recommendations and personalized chat.',
 };
 
 export default function RootLayout({ children }) {
@@ -14,11 +14,13 @@ export default function RootLayout({ children }) {
       <body>
         <AuthProvider>
           <Navbar />
-          <main>{children}</main>
+          <main className="main-content">
+            {children}
+          </main>
           <ChatbotWidget />
           <footer className="footer">
             <div className="container">
-              <p>© 2026 ShopAI — AI-Powered Shopping Assistant. Built with Next.js & NLP.</p>
+              <p>© 2026 Bazario — Premium AI Shopping Assistant. Built with Next.js & NLP.</p>
             </div>
           </footer>
         </AuthProvider>

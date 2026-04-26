@@ -59,7 +59,7 @@ export default function RegisterPage() {
         <div className="auth-page">
             <form className="auth-form" onSubmit={handleSubmit}>
                 <h1>Create Account ✨</h1>
-                <p className="subtitle">Join ShopAI for a smarter shopping experience</p>
+                <p className="subtitle">Join Bazario for a smarter shopping experience</p>
 
                 <div className="form-group">
                     <label>Full Name</label>
