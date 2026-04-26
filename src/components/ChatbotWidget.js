@@ -1,29 +1,70 @@
 'use client';
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { useSession } from 'next-auth/react';
+import Link from 'next/link';
+
+// Generate a stable sessionId per browser tab/session
+function getSessionId() {
+    if (typeof window === 'undefined') return null;
+    const key = 'shopai_session_id';
+    let id = sessionStorage.getItem(key);
+    if (!id) {
+        id = `sess_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+        sessionStorage.setItem(key, id);
+    }
+    return id;
+}
 
 export default function ChatbotWidget() {
     const { data: session } = useSession();
     const [isOpen, setIsOpen] = useState(false);
-    const [messages, setMessages] = useState([
-        { role: 'bot', content: "Hello! 👋 I'm your AI shopping assistant. How can I help you today?\n\nTry: \"Show me electronics\" or \"Help\"" }
-    ]);
+    const [messages, setMessages] = useState([]);
     const [input, setInput] = useState('');
     const [loading, setLoading] = useState(false);
-    const [context, setContext] = useState({});
+    const [thinkingSteps, setThinkingSteps] = useState([]);
+    const [sessionId] = useState(() => getSessionId());
     const messagesEnd = useRef(null);
+    const inputRef = useRef(null);
 
+    // Scroll to bottom whenever messages change
     useEffect(() => {
         messagesEnd.current?.scrollIntoView({ behavior: 'smooth' });
-    }, [messages]);
+    }, [messages, thinkingSteps]);
 
-    const sendMessage = async (text) => {
-        const msg = text || input.trim();
-        if (!msg) return;
+    // Focus input when opened
+    useEffect(() => {
+        if (isOpen && session) {
+            setTimeout(() => inputRef.current?.focus(), 100);
+        }
+    }, [isOpen, session]);
+
+    // Set the welcome message based on login state
+    useEffect(() => {
+        if (!session) {
+            setMessages([{
+                role: 'bot',
+                content: null,
+                isLoginPrompt: true,
+            }]);
+        } else {
+            setMessages([{
+                role: 'bot',
+                content: `👋 Welcome back, **${session.user.name.split(' ')[0]}**! I'm your AI shopping assistant.\n\nI remember our previous conversations and learn your preferences over time. How can I help you today?`,
+            }]);
+        }
+    }, [session]);
+
+    const sendMessage = useCallback(async (text) => {
+        const msg = (text || input).trim();
+        if (!msg || loading) return;
 
         setMessages(prev => [...prev, { role: 'user', content: msg }]);
         setInput('');
         setLoading(true);
+        setThinkingSteps([]);
+
+        // Show a "thinking" placeholder immediately
+        setMessages(prev => [...prev, { role: 'bot', content: null, isThinking: true, id: 'thinking' }]);
 
         try {
             const res = await fetch('/api/chat', {
@@ -32,92 +73,157 @@ export default function ChatbotWidget() {
                 body: JSON.stringify({
                     message: msg,
                     userId: session?.user?.id,
-                    context,
+                    sessionId,
                 }),
             });
 
             const data = await res.json();
-            setMessages(prev => [...prev, { role: 'bot', content: data.reply }]);
 
-            // Update context
-            if (data.data?.products?.length === 1 || data.data?.product) {
-                setContext(prev => ({
-                    ...prev,
-                    currentProduct: data.data?.product || data.data?.products?.[0],
-                }));
-            }
+            // Replace thinking placeholder with real reply + thinking steps
+            setMessages(prev => {
+                const withoutThinking = prev.filter(m => m.id !== 'thinking');
+                return [
+                    ...withoutThinking,
+                    {
+                        role: 'bot',
+                        content: data.reply,
+                        thinkingSteps: data.thinkingSteps || [],
+                        action: data.action,
+                    },
+                ];
+            });
 
-            // Dispatch cart update event
+            // Trigger cart refresh if needed
             if (data.action === 'cart_updated' || data.action === 'order_placed') {
                 window.dispatchEvent(new Event('cart-updated'));
             }
-        } catch (err) {
-            setMessages(prev => [...prev, { role: 'bot', content: 'Sorry, something went wrong. Please try again! 😅' }]);
+        } catch {
+            setMessages(prev => {
+                const withoutThinking = prev.filter(m => m.id !== 'thinking');
+                return [...withoutThinking, { role: 'bot', content: '😅 Something went wrong. Please try again!' }];
+            });
         }
 
         setLoading(false);
-    };
+    }, [input, loading, session, sessionId]);
 
-    const quickReplies = ['🔍 Show electronics', '💡 Recommendations', '🛒 View cart', '📦 My orders', '❓ Help'];
+    const quickReplies = session
+        ? ['🔍 Show electronics', '💡 Recommendations', '🛒 View cart', '📦 My orders', '📂 Categories']
+        : [];
 
     return (
         <>
+            {/* Floating toggle button */}
             <button
                 className="chatbot-toggle"
-                onClick={() => setIsOpen(!isOpen)}
+                onClick={() => setIsOpen(o => !o)}
                 title="AI Shopping Assistant"
+                aria-label="Toggle AI Shopping Assistant"
             >
                 {isOpen ? '✕' : '🤖'}
             </button>
 
             {isOpen && (
                 <div className="chatbot-window">
+                    {/* Header */}
                     <div className="chatbot-header">
                         <div className="chatbot-header-info">
                             <div className="chatbot-header-avatar">🤖</div>
                             <div>
                                 <h3>ShopAI Assistant</h3>
-                                <p>AI-powered • Always ready</p>
+                                <p>{session ? 'Gemini AI • Learns your preferences' : 'Login required'}</p>
                             </div>
                         </div>
                         <button className="chatbot-close" onClick={() => setIsOpen(false)}>✕</button>
                     </div>
 
+                    {/* Messages */}
                     <div className="chatbot-messages">
-                        {messages.map((msg, i) => (
-                            <div key={i} className={`chat-message ${msg.role}`}>
-                                {msg.content}
-                            </div>
-                        ))}
-                        {loading && (
-                            <div className="chat-message bot">
-                                <span style={{ animation: 'pulse 1s infinite' }}>Thinking...</span>
-                            </div>
-                        )}
+                        {messages.map((msg, i) => {
+                            // Login prompt card
+                            if (msg.isLoginPrompt) {
+                                return (
+                                    <div key={i} className="chat-message bot">
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                                            <p>🔐 <strong>Login required</strong></p>
+                                            <p style={{ fontSize: '0.85rem', opacity: 0.85 }}>
+                                                The ShopAI assistant is personalized for each user. Please log in to start chatting, get recommendations, and manage your cart.
+                                            </p>
+                                            <div style={{ display: 'flex', gap: '8px' }}>
+                                                <Link href="/login" className="btn btn-primary btn-sm" onClick={() => setIsOpen(false)}>
+                                                    Login
+                                                </Link>
+                                                <Link href="/register" className="btn btn-secondary btn-sm" onClick={() => setIsOpen(false)}>
+                                                    Sign Up
+                                                </Link>
+                                            </div>
+                                        </div>
+                                    </div>
+                                );
+                            }
+
+                            // Thinking placeholder
+                            if (msg.isThinking) {
+                                return (
+                                    <div key={i} className="chat-message bot thinking-message">
+                                        <span className="thinking-dots">
+                                            <span />
+                                            <span />
+                                            <span />
+                                        </span>
+                                        <span style={{ fontSize: '0.8rem', opacity: 0.7, marginLeft: '8px' }}>
+                                            Thinking...
+                                        </span>
+                                    </div>
+                                );
+                            }
+
+                            return (
+                                <div key={i} className={`chat-message ${msg.role}`}>
+                                    {/* Tool thinking steps shown above bot reply */}
+                                    {msg.role === 'bot' && msg.thinkingSteps?.length > 0 && (
+                                        <div className="thinking-steps">
+                                            {msg.thinkingSteps.map((step, j) => (
+                                                <span key={j} className="thinking-step-chip">{step}</span>
+                                            ))}
+                                        </div>
+                                    )}
+                                    <MarkdownMessage content={msg.content} />
+                                </div>
+                            );
+                        })}
+
                         <div ref={messagesEnd} />
                     </div>
 
-                    <div className="chatbot-quick-replies">
-                        {quickReplies.map((reply, i) => (
-                            <button
-                                key={i}
-                                className="quick-reply"
-                                onClick={() => sendMessage(reply.replace(/^[^\s]+\s/, ''))}
-                            >
-                                {reply}
-                            </button>
-                        ))}
-                    </div>
+                    {/* Quick replies — only for logged-in users */}
+                    {session && quickReplies.length > 0 && (
+                        <div className="chatbot-quick-replies">
+                            {quickReplies.map((reply, i) => (
+                                <button
+                                    key={i}
+                                    className="quick-reply"
+                                    onClick={() => sendMessage(reply.replace(/^[^\s]+\s/, ''))}
+                                    disabled={loading}
+                                >
+                                    {reply}
+                                </button>
+                            ))}
+                        </div>
+                    )}
 
+                    {/* Input area */}
                     <div className="chatbot-input-area">
                         <input
+                            ref={inputRef}
                             type="text"
-                            placeholder="Ask me anything..."
+                            placeholder={session ? 'Ask me anything...' : 'Login to chat'}
                             value={input}
-                            onChange={(e) => setInput(e.target.value)}
-                            onKeyDown={(e) => e.key === 'Enter' && sendMessage()}
+                            onChange={e => setInput(e.target.value)}
+                            onKeyDown={e => e.key === 'Enter' && !e.shiftKey && sendMessage()}
+                            disabled={!session || loading}
                         />
-                        <button onClick={() => sendMessage()} disabled={loading}>
+                        <button onClick={() => sendMessage()} disabled={!session || loading || !input.trim()}>
                             ➤
                         </button>
                     </div>
@@ -125,4 +231,22 @@ export default function ChatbotWidget() {
             )}
         </>
     );
+}
+
+// Minimal markdown renderer for bold (**text**) and newlines
+function MarkdownMessage({ content }) {
+    if (!content) return null;
+
+    // Convert **text** → <strong>, then split on newlines
+    const parts = content.split('\n').map((line, i) => {
+        const segments = line.split(/(\*\*[^*]+\*\*)/g).map((seg, j) => {
+            if (seg.startsWith('**') && seg.endsWith('**')) {
+                return <strong key={j}>{seg.slice(2, -2)}</strong>;
+            }
+            return seg;
+        });
+        return <span key={i}>{segments}{i < content.split('\n').length - 1 && <br />}</span>;
+    });
+
+    return <div>{parts}</div>;
 }
