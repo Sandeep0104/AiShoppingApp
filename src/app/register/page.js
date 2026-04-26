@@ -57,7 +57,7 @@ export default function RegisterPage() {
 
     return (
         <div className="auth-page">
-            <form className="auth-form" onSubmit={handleSubmit}>
+            <form className="auth-form tilt-card" onSubmit={handleSubmit}>
                 <h1>Create Account ✨</h1>
                 <p className="subtitle">Join Bazario for a smarter shopping experience</p>
 

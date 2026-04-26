@@ -15,7 +15,7 @@ function ProductCard({ product }) {
     };
 
     return (
-        <Link href={`/products/${product._id}`} className="product-card">
+        <Link href={`/products/${product._id}`} className="product-card tilt-card">
             {product.discountPercentage > 5 && (
                 <div className="product-card-discount">-{Math.round(product.discountPercentage)}%</div>
             )}

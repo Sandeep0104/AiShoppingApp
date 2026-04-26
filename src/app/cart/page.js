@@ -118,7 +118,7 @@ export default function CartPage() {
                             </div>
 
                             {cart.map((item) => (
-                                <div key={item.product?._id} className="cart-item">
+                                <div key={item.product?._id} className="cart-item tilt-card">
                                     <div className="cart-item-image">
                                         <img src={item.product?.thumbnail} alt={item.product?.title} />
                                     </div>
@@ -141,7 +141,7 @@ export default function CartPage() {
                             ))}
                         </div>
 
-                        <div className="cart-summary">
+                        <div className="cart-summary tilt-card">
                             <h3>Order Summary</h3>
                             <div className="cart-summary-row">
                                 <span>Subtotal</span>

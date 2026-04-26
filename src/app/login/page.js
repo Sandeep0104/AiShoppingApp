@@ -32,7 +32,7 @@ export default function LoginPage() {
 
     return (
         <div className="auth-page">
-            <form className="auth-form" onSubmit={handleSubmit}>
+            <form className="auth-form tilt-card" onSubmit={handleSubmit}>
                 <h1>Welcome Back 👋</h1>
                 <p className="subtitle">Login to your Bazario account</p>
 
