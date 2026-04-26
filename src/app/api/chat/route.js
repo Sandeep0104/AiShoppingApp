@@ -6,8 +6,10 @@ import {
     getUserBehaviorProfile,
     updateUserBehavior,
     incrementSessionCount,
-    extractSignalsFromToolCalls,
 } from '@/lib/ai/memory';
+
+// Tell Vercel to allow up to 60 seconds for this function (needed for AI + DB)
+export const maxDuration = 60;
 
 export async function POST(request) {
     try {
@@ -15,10 +17,10 @@ export async function POST(request) {
 
         const { message, userId, sessionId } = await request.json();
 
-        // ── Auth guard: only logged-in users may chat ──────────────────────
+        // ── Auth guard ──────────────────────────────────────────────────────
         if (!userId) {
             return NextResponse.json({
-                reply: '🔐 Please **log in** to chat with the ShopAI assistant. Your conversations and recommendations are personalized just for you!',
+                reply: '🔐 Please **log in** to chat with ShopAI. Your conversations and recommendations are personalized just for you!',
                 action: 'require_login',
             });
         }
@@ -27,12 +29,10 @@ export async function POST(request) {
             return NextResponse.json({ error: 'Message is required' }, { status: 400 });
         }
 
-        // ── Resolve session ID ─────────────────────────────────────────────
-        // sessionId comes from the client; it's a UUID created once per browser session.
+        // ── Session & memory ────────────────────────────────────────────────
         const resolvedSessionId = sessionId || `${userId}-${Date.now()}`;
         const isNewSession = !sessionId;
 
-        // ── Load memory ────────────────────────────────────────────────────
         const [chatHistory, behaviorProfile] = await Promise.all([
             getChatHistory(resolvedSessionId),
             getUserBehaviorProfile(userId),
@@ -41,41 +41,50 @@ export async function POST(request) {
         const historyMessages = await chatHistory.getMessages();
 
         if (isNewSession) {
-            // Fire-and-forget — don't block the response
             incrementSessionCount(userId).catch(() => {});
         }
 
-        // ── Run the LangGraph agent ────────────────────────────────────────
-        const { reply, action, toolsUsed, toolResults, newMessages } = await runAgent({
+        // ── Run the Gemini agent ────────────────────────────────────────────
+        const { reply, action, toolsUsed, toolResults } = await runAgent({
             userId,
             userMessage: message,
             historyMessages,
             behaviorProfile,
         });
 
-        // ── Persist new messages to MongoDB (short-term memory) ───────────
-        if (newMessages?.length > 0) {
-            chatHistory.addMessages(newMessages).catch(err =>
-                console.error('[Chat API] Failed to save history:', err.message)
-            );
+        // ── Persist conversation turn (human + AI) to MongoDB ──────────────
+        try {
+            await chatHistory.addMessages([
+                { _getType: () => 'human', content: message },
+                { _getType: () => 'ai', content: reply },
+            ]);
+        } catch (e) {
+            // Non-fatal — don't let history save failure break the response
+            console.error('[Chat API] History save failed:', e.message);
         }
 
-        // ── Update long-term behavior profile (non-blocking) ──────────────
-        const signals = extractSignalsFromToolCalls(toolsUsed, toolResults);
-        signals.keyword = message.slice(0, 60); // store raw query as keyword signal
+        // ── Update long-term behavior profile ─────────────────────────────
+        const signals = { keyword: message.slice(0, 60) };
+        if (toolsUsed.includes('search_products')) {
+            const catMatch = toolResults.find(r => r.tool === 'search_products')?.content?.match(/🏷️\s*([^\s|]+)/);
+            if (catMatch) signals.searchedCategory = catMatch[1];
+        }
+        if (toolsUsed.includes('place_order')) {
+            signals.purchasedCategory = 'general';
+        }
         updateUserBehavior(userId, signals).catch(() => {});
 
-        // ── Build a human-readable "thinking" label for the UI ─────────────
+        // ── Tool labels for UI chips ────────────────────────────────────────
         const toolLabels = {
             search_products: '🔍 Searching products',
-            get_product_details: '📋 Fetching product details',
+            get_product_details: '📋 Fetching details',
             add_to_cart: '🛒 Adding to cart',
             view_cart: '🛒 Loading cart',
-            remove_from_cart: '🗑️ Removing from cart',
+            remove_from_cart: '🗑️ Removing item',
             clear_cart: '🗑️ Clearing cart',
             place_order: '📦 Placing order',
             get_order_history: '📦 Loading orders',
-            get_recommendations: '💡 Finding recommendations',
+            get_recommendations: '💡 Finding picks',
             get_categories: '📂 Loading categories',
             add_to_wishlist: '💖 Saving to wishlist',
         };
@@ -92,18 +101,16 @@ export async function POST(request) {
     } catch (error) {
         console.error('[Chat API] Error:', error);
 
-        // Friendly error for missing API key
         if (error.message?.includes('GOOGLE_API_KEY')) {
             return NextResponse.json({
-                reply: '⚠️ The AI assistant is not configured yet. Please add your **GOOGLE_API_KEY** to `.env.local`. Get a free key at [aistudio.google.com](https://aistudio.google.com/app/apikey)',
+                reply: '⚠️ AI not configured. Add GOOGLE_API_KEY to your environment variables.',
                 action: null,
             });
         }
 
         return NextResponse.json({
-            reply: '😅 Something went wrong on my end. Please try again in a moment!',
+            reply: `😅 Something went wrong: ${error.message}. Please try again!`,
             action: null,
-            error: error.message,
         }, { status: 500 });
     }
 }

@@ -77,9 +77,10 @@ export async function incrementSessionCount(userId) {
 export function buildBehaviorPrompt(profile) {
     if (!profile) return '';
 
-    const top = (map, n = 3) => {
-        if (!map || typeof map.entries !== 'function') return '';
-        return [...map.entries()]
+    // Handle plain objects from MongoDB .lean() — NOT Maps
+    const top = (obj, n = 3) => {
+        if (!obj || typeof obj !== 'object') return '';
+        return Object.entries(obj)
             .sort((a, b) => b[1] - a[1])
             .slice(0, n)
             .map(([k]) => k.replace(/_/g, ' '))
@@ -105,6 +106,7 @@ export function buildBehaviorPrompt(profile) {
 
     return lines.join('\n');
 }
+
 
 // Extract behavior signals from the list of tools that were called this turn
 export function extractSignalsFromToolCalls(toolsUsed = [], toolResults = []) {
