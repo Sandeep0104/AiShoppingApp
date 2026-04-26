@@ -262,6 +262,7 @@ export const groqToolDeclarations = [
                     maxPrice: { type: 'number', description: 'Maximum price in USD' },
                     minRating: { type: 'number', description: 'Minimum rating between 1-5' },
                 },
+                required: [],
             },
         }
     },
@@ -276,6 +277,7 @@ export const groqToolDeclarations = [
                     productId: { type: 'string', description: 'MongoDB product ID from search results' },
                     productName: { type: 'string', description: 'Product name if no ID available' },
                 },
+                required: [],
             },
         }
     },
@@ -291,6 +293,7 @@ export const groqToolDeclarations = [
                     productName: { type: 'string', description: 'Product name fallback' },
                     quantity: { type: 'number', description: 'Quantity to add, default 1' },
                 },
+                required: [],
             },
         }
     },
@@ -299,7 +302,7 @@ export const groqToolDeclarations = [
         function: {
             name: 'view_cart',
             description: "Show the user's current cart with all items, quantities, prices and total.",
-            parameters: { type: 'object', properties: {} },
+            parameters: { type: 'object', properties: {}, required: [] },
         }
     },
     {
@@ -313,6 +316,7 @@ export const groqToolDeclarations = [
                     productId: { type: 'string', description: 'Product ID to remove' },
                     productName: { type: 'string', description: 'Product name to remove' },
                 },
+                required: [],
             },
         }
     },
@@ -321,7 +325,7 @@ export const groqToolDeclarations = [
         function: {
             name: 'clear_cart',
             description: "Empty the user's entire cart. Only call if user explicitly asks to clear all items.",
-            parameters: { type: 'object', properties: {} },
+            parameters: { type: 'object', properties: {}, required: [] },
         }
     },
     {
@@ -334,6 +338,7 @@ export const groqToolDeclarations = [
                 properties: {
                     paymentMethod: { type: 'string', description: 'Payment method: cod, card. Default: cod' },
                 },
+                required: [],
             },
         }
     },
@@ -342,7 +347,7 @@ export const groqToolDeclarations = [
         function: {
             name: 'get_order_history',
             description: "Show the user's recent orders with status, total, and date.",
-            parameters: { type: 'object', properties: {} },
+            parameters: { type: 'object', properties: {}, required: [] },
         }
     },
     {
@@ -350,7 +355,7 @@ export const groqToolDeclarations = [
         function: {
             name: 'get_recommendations',
             description: "Get AI-powered personalized product recommendations based on user's purchase history and preferences.",
-            parameters: { type: 'object', properties: {} },
+            parameters: { type: 'object', properties: {}, required: [] },
         }
     },
     {
@@ -358,7 +363,7 @@ export const groqToolDeclarations = [
         function: {
             name: 'get_categories',
             description: 'List all available product categories in the store.',
-            parameters: { type: 'object', properties: {} },
+            parameters: { type: 'object', properties: {}, required: [] },
         }
     },
     {
@@ -372,6 +377,7 @@ export const groqToolDeclarations = [
                     productId: { type: 'string', description: 'Product ID (preferred)' },
                     productName: { type: 'string', description: 'Product name fallback' },
                 },
+                required: [],
             },
         }
     },
