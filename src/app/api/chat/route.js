@@ -101,9 +101,9 @@ export async function POST(request) {
     } catch (error) {
         console.error('[Chat API] Error:', error);
 
-        if (error.message?.includes('GOOGLE_API_KEY')) {
+        if (error.message?.includes('GROQ_API_KEY')) {
             return NextResponse.json({
-                reply: '⚠️ AI not configured. Add GOOGLE_API_KEY to your environment variables.',
+                reply: '⚠️ AI not configured. Add GROQ_API_KEY to your environment variables.',
                 action: null,
             });
         }

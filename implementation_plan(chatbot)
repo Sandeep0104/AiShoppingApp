@@ -1,0 +1,237 @@
+# Upgrade Chatbot: Rule-Based → LangChain AI Agent
+
+## Overview
+
+Replace the current regex-based intent classifier (`classifyIntent`) with a **LangChain + LangGraph ReAct Agent**. The agent will:
+
+- Understand free-form natural language via a real LLM
+- Call **tools** (MongoDB-backed functions) to search, manage cart, place orders, etc.
+- Maintain **short-term memory** (current session conversation history)
+- Learn from **long-term memory** (past sessions stored in MongoDB)
+- Build a **user behavior profile** by tracking searched categories, purchased brands, viewed products — and use that profile to personalize every response
+
+---
+
+## User Review Required
+
+> [!IMPORTANT]
+> **LLM Provider Choice — You must pick one.** The agent requires a real LLM. Here are the free/affordable options:
+>
+> | Provider | Free Tier | Model | Speed |
+> |---|---|---|---|
+> | **Google Gemini** ⭐ Recommended | Yes — 15 req/min | `gemini-1.5-flash` | Fast |
+> | **Groq** | Yes — generous | `llama-3.1-70b` | Very Fast |
+> | **OpenAI** | No (paid) | `gpt-4o-mini` | Fast |
+>
+> **Recommendation: Google Gemini** — free API key at [aistudio.google.com](https://aistudio.google.com), no credit card required. I'll implement with Gemini but make it easy to swap.
+>
+> You will need to add your API key to `.env.local` as `GOOGLE_API_KEY=...`
+
+> [!WARNING]
+> **The existing `src/lib/ai/chatbot.js`** (regex intent classifier) will be **replaced** by the new LangChain agent. The old file will be kept for reference but no longer used. The `sentiment.js` and `recommendations.js` engines are **unchanged** — the agent will call them as tools.
+
+---
+
+## Open Questions
+
+> [!IMPORTANT]
+> 1. **Which LLM provider** do you want? (Gemini / Groq / OpenAI)
+> 2. Do you want the **chat UI** to also show which tool the agent called (e.g., "🔧 Searching products...") for a more transparent AI feel?
+> 3. Should **guest users** (not logged in) be able to chat? Currently yes — should we keep that?
+
+---
+
+## Proposed Architecture
+
+```
+User types message
+        │
+        ▼
+  ChatbotWidget.js  ──POST──►  /api/chat/route.js
+                                      │
+                         Load MongoDB conversation history
+                         Load user behavior profile
+                                      │
+                                      ▼
+                          LangGraph ReAct Agent
+                          ┌─────────────────────┐
+                          │  System Prompt       │
+                          │  + User Profile      │
+                          │  + Chat History      │
+                          │  + Current Message   │
+                          └────────┬────────────┘
+                                   │  LLM decides
+                                   ▼
+                         ┌──────────────────┐
+                         │   Tool Calls     │
+                         │  searchProducts  │
+                         │  addToCart       │
+                         │  placeOrder      │
+                         │  getOrders       │
+                         │  getRecommend.   │
+                         │  manageWishlist  │
+                         │  getCategories   │
+                         │  viewCart        │
+                         │  removeFromCart  │
+                         └──────┬───────────┘
+                                │
+                                ▼
+                     Agent generates final reply
+                                │
+                     Save to MongoDB (history + behavior update)
+                                │
+                                ▼
+                     Return { reply, action, data }
+```
+
+---
+
+## Proposed Changes
+
+### 1. Environment & Dependencies
+
+#### `.env.local` — Add API key
+```
+GOOGLE_API_KEY=your_gemini_api_key_here
+```
+
+#### New npm packages to install
+```bash
+npm install langchain @langchain/core @langchain/google-genai @langchain/langgraph @langchain/mongodb zod
+```
+
+---
+
+### 2. Database Layer
+
+#### [MODIFY] `src/lib/models/Chat.js`
+Enhanced schema to store full LangChain-compatible message history per session, plus extracted behavior signals per turn:
+- `sessionId` field for per-session thread tracking
+- `messages[]` extended: role (`human`|`ai`|`tool`), content, tool calls
+- `behaviorSignals[]`: what the agent inferred this turn (searched category, viewed brand, etc.)
+
+#### [NEW] `src/lib/models/UserBehavior.js`
+New model to persist a **user behavior profile** built over time:
+```js
+{
+  user: ObjectId,               // ref User
+  searchedCategories: Map,      // { "laptops": 5, "smartphones": 3 }
+  viewedBrands: Map,            // { "Apple": 4, "Samsung": 2 }
+  purchasedCategories: Map,
+  priceRangePreference: { min, max, avg },
+  sentimentPattern: String,     // "tends to leave positive reviews"
+  lastActive: Date,
+  totalSessions: Number,
+  behaviorSummary: String,      // LLM-generated natural language summary
+}
+```
+
+---
+
+### 3. AI Layer
+
+#### [MODIFY/REPLACE] `src/lib/ai/chatbot.js` → `src/lib/ai/agent.js`
+Complete replacement with the **LangGraph ReAct agent**:
+- Initializes `ChatGoogleGenerativeAI` (or swappable provider)
+- Defines the **StateGraph** with `messagesStateReducer`
+- Binds tools and sets up the reasoning loop
+
+#### [NEW] `src/lib/ai/tools.js`
+9 LangChain tools using `tool()` factory + Zod schemas:
+
+| Tool Name | What it does |
+|---|---|
+| `search_products` | Full-text + regex search in MongoDB |
+| `get_product_details` | Fetch one product by name/ID |
+| `add_to_cart` | Add product to user's cart |
+| `view_cart` | Fetch populated cart |
+| `remove_from_cart` | Remove item from cart |
+| `clear_cart` | Empty entire cart |
+| `place_order` | Checkout cart → create Order |
+| `get_order_history` | Recent orders + status |
+| `get_recommendations` | Call hybrid recommendation engine |
+| `get_categories` | List all product categories |
+| `add_to_wishlist` | Save product to wishlist |
+
+#### [NEW] `src/lib/ai/memory.js`
+Manages both memory layers:
+- **Short-term**: `MongoDBChatMessageHistory` scoped to `sessionId` — gives agent the last N messages
+- **Long-term**: Reads/writes `UserBehavior` document — passed as part of the system prompt
+- `extractBehaviorSignals(messages)` — parses tool calls to update behavior profile after each turn
+
+---
+
+### 4. API Route
+
+#### [MODIFY] `src/app/api/chat/route.js`
+Complete rewrite — replaces the `switch(intent)` handler:
+1. Connect DB
+2. Load or create session ID (from request body)
+3. Load conversation history from `MongoDBChatMessageHistory`
+4. Load user behavior profile
+5. Build system prompt with user profile injected
+6. Run LangGraph agent with history + current message
+7. Extract `action` signals (cart_updated, order_placed) from tool calls
+8. Save new messages to MongoDB
+9. Update `UserBehavior` asynchronously
+10. Return `{ reply, action, data, sessionId }`
+
+---
+
+### 5. Frontend
+
+#### [MODIFY] `src/components/ChatbotWidget.js`
+Minor changes:
+- Persist `sessionId` in `useState` (passed to each API call for memory continuity)
+- Optionally show **tool thinking indicator**: "🔧 Checking your cart..." while loading
+
+---
+
+## How "Learning" Works
+
+### Per-session memory (short-term)
+The agent sees the **last 20 messages** of the current session via `MongoDBChatMessageHistory`. This means:
+> User: "Show me Samsung phones"
+> Agent: [shows results]
+> User: "Add the first one to cart"  ← Agent knows "first one" = Samsung phone from context
+
+### Cross-session memory (long-term)
+After each session, behavior signals are extracted and accumulated in `UserBehavior`:
+- Categories searched → weighted category preference
+- Products viewed → brand preferences
+- Purchase history → price range preference
+
+This profile is **injected into the system prompt** every conversation:
+```
+You are ShopAI. This user's profile:
+- Prefers: Electronics, Laptops (searched 8 times)  
+- Favourite brands: Apple, Dell
+- Typical spend: $500–$1200
+- Has purchased: 3 times, always uses COD
+```
+
+So the agent **proactively** recommends electronics and Apple products without being asked.
+
+### Behavior summary regeneration
+Every 5 sessions, the agent uses the LLM itself to generate a new `behaviorSummary` string from raw signals — this keeps the system prompt concise and accurate.
+
+---
+
+## Verification Plan
+
+### Automated
+- `npm run dev` — ensure server starts without errors
+- Test `/api/chat` with Postman/curl:
+  - `{ "message": "show me laptops under 1000" }` → should call `search_products`
+  - `{ "message": "add first one to cart", "userId": "..." }` → should use session history to know "first one"
+  - `{ "message": "checkout" }` → should call `place_order`
+
+### Manual (browser)
+- Open chatbot widget → ask "what phones do you have?" → browse → "add to cart" → "checkout"
+- Reload page → ask "what did I buy last?" → agent should recall from MongoDB history
+- New user vs returning user: returning user should get category-personalized greetings
+
+### Edge cases
+- Guest user (no userId) → agent should respond but decline cart/order actions gracefully
+- Empty cart checkout → agent should inform user, not crash
+- Unknown query → LLM handles gracefully instead of falling back to a static "I don't know"

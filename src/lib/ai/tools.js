@@ -246,102 +246,133 @@ export const toolFunctions = {
     },
 };
 
-// ─── Gemini Function Declarations (schema for Gemini native function calling) ─
+// ─── Groq Function Declarations (schema for Groq native function calling) ─
 
-export const geminiToolDeclarations = {
-    functionDeclarations: [
-        {
+export const groqToolDeclarations = [
+    {
+        type: 'function',
+        function: {
             name: 'search_products',
             description: 'Search products by keyword, category, max price, or minimum rating. Returns up to 5 results with product IDs. Use when user wants to find, browse, or discover products.',
             parameters: {
-                type: 'OBJECT',
+                type: 'object',
                 properties: {
-                    query: { type: 'STRING', description: 'Search keyword — product name, type, brand, or use case' },
-                    category: { type: 'STRING', description: 'Category filter e.g. laptops, smartphones, furniture' },
-                    maxPrice: { type: 'NUMBER', description: 'Maximum price in USD' },
-                    minRating: { type: 'NUMBER', description: 'Minimum rating between 1-5' },
+                    query: { type: 'string', description: 'Search keyword — product name, type, brand, or use case' },
+                    category: { type: 'string', description: 'Category filter e.g. laptops, smartphones, furniture' },
+                    maxPrice: { type: 'number', description: 'Maximum price in USD' },
+                    minRating: { type: 'number', description: 'Minimum rating between 1-5' },
                 },
             },
-        },
-        {
+        }
+    },
+    {
+        type: 'function',
+        function: {
             name: 'get_product_details',
             description: 'Get full details of a product: description, price, warranty, shipping, return policy, reviews. Use productId from search results.',
             parameters: {
-                type: 'OBJECT',
+                type: 'object',
                 properties: {
-                    productId: { type: 'STRING', description: 'MongoDB product ID from search results' },
-                    productName: { type: 'STRING', description: 'Product name if no ID available' },
+                    productId: { type: 'string', description: 'MongoDB product ID from search results' },
+                    productName: { type: 'string', description: 'Product name if no ID available' },
                 },
             },
-        },
-        {
+        }
+    },
+    {
+        type: 'function',
+        function: {
             name: 'add_to_cart',
             description: "Add a product to the user's cart. Always use productId from search results. Can specify quantity.",
             parameters: {
-                type: 'OBJECT',
+                type: 'object',
                 properties: {
-                    productId: { type: 'STRING', description: 'Product ID (preferred — use from search results)' },
-                    productName: { type: 'STRING', description: 'Product name fallback' },
-                    quantity: { type: 'NUMBER', description: 'Quantity to add, default 1' },
+                    productId: { type: 'string', description: 'Product ID (preferred — use from search results)' },
+                    productName: { type: 'string', description: 'Product name fallback' },
+                    quantity: { type: 'number', description: 'Quantity to add, default 1' },
                 },
             },
-        },
-        {
+        }
+    },
+    {
+        type: 'function',
+        function: {
             name: 'view_cart',
             description: "Show the user's current cart with all items, quantities, prices and total.",
-            parameters: { type: 'OBJECT', properties: {} },
-        },
-        {
+            parameters: { type: 'object', properties: {} },
+        }
+    },
+    {
+        type: 'function',
+        function: {
             name: 'remove_from_cart',
             description: "Remove a specific product from the user's cart.",
             parameters: {
-                type: 'OBJECT',
+                type: 'object',
                 properties: {
-                    productId: { type: 'STRING', description: 'Product ID to remove' },
-                    productName: { type: 'STRING', description: 'Product name to remove' },
+                    productId: { type: 'string', description: 'Product ID to remove' },
+                    productName: { type: 'string', description: 'Product name to remove' },
                 },
             },
-        },
-        {
+        }
+    },
+    {
+        type: 'function',
+        function: {
             name: 'clear_cart',
             description: "Empty the user's entire cart. Only call if user explicitly asks to clear all items.",
-            parameters: { type: 'OBJECT', properties: {} },
-        },
-        {
+            parameters: { type: 'object', properties: {} },
+        }
+    },
+    {
+        type: 'function',
+        function: {
             name: 'place_order',
             description: "Checkout — convert the user's cart into a confirmed order. Call when user says checkout, place order, or buy now.",
             parameters: {
-                type: 'OBJECT',
+                type: 'object',
                 properties: {
-                    paymentMethod: { type: 'STRING', description: 'Payment method: cod, card. Default: cod' },
+                    paymentMethod: { type: 'string', description: 'Payment method: cod, card. Default: cod' },
                 },
             },
-        },
-        {
+        }
+    },
+    {
+        type: 'function',
+        function: {
             name: 'get_order_history',
             description: "Show the user's recent orders with status, total, and date.",
-            parameters: { type: 'OBJECT', properties: {} },
-        },
-        {
+            parameters: { type: 'object', properties: {} },
+        }
+    },
+    {
+        type: 'function',
+        function: {
             name: 'get_recommendations',
             description: "Get AI-powered personalized product recommendations based on user's purchase history and preferences.",
-            parameters: { type: 'OBJECT', properties: {} },
-        },
-        {
+            parameters: { type: 'object', properties: {} },
+        }
+    },
+    {
+        type: 'function',
+        function: {
             name: 'get_categories',
             description: 'List all available product categories in the store.',
-            parameters: { type: 'OBJECT', properties: {} },
-        },
-        {
+            parameters: { type: 'object', properties: {} },
+        }
+    },
+    {
+        type: 'function',
+        function: {
             name: 'add_to_wishlist',
             description: "Save a product to the user's wishlist for later.",
             parameters: {
-                type: 'OBJECT',
+                type: 'object',
                 properties: {
-                    productId: { type: 'STRING', description: 'Product ID (preferred)' },
-                    productName: { type: 'STRING', description: 'Product name fallback' },
+                    productId: { type: 'string', description: 'Product ID (preferred)' },
+                    productName: { type: 'string', description: 'Product name fallback' },
                 },
             },
-        },
-    ],
-};
+        }
+    },
+];

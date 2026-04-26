@@ -1,8 +1,8 @@
-// ShopAI Agent — Powered by Google Gemini 2.0 Flash with Native Function Calling
-// Uses @google/generative-ai directly (no LangChain/LangGraph overhead)
+// ShopAI Agent — Powered by Groq (Llama 3 70B) with Native Function Calling
+// Uses groq-sdk
 
-import { GoogleGenerativeAI } from '@google/generative-ai';
-import { geminiToolDeclarations, toolFunctions } from './tools';
+import Groq from 'groq-sdk';
+import { groqToolDeclarations, toolFunctions } from './tools';
 import { buildBehaviorPrompt } from './memory';
 
 // ─── System prompt factory ────────────────────────────────────────────────────
@@ -36,12 +36,12 @@ ${behaviorBlock}`;
 }
 
 // ─── Execute a single tool call ───────────────────────────────────────────────
-async function executeTool(name, args, userId) {
+async function executeTool(name, argsStr, userId) {
     const fn = toolFunctions[name];
     if (!fn) return `Unknown tool: ${name}`;
     try {
-        // Tools that need userId receive it as second arg
-        return await fn(args || {}, userId);
+        const args = JSON.parse(argsStr || '{}');
+        return await fn(args, userId);
     } catch (err) {
         console.error(`[Tool Error] ${name}:`, err.message);
         return `Tool error: ${err.message}`;
@@ -50,94 +50,80 @@ async function executeTool(name, args, userId) {
 
 // ─── Main agent runner ────────────────────────────────────────────────────────
 export async function runAgent({ userId, userMessage, historyMessages, behaviorProfile }) {
-    if (!process.env.GOOGLE_API_KEY) {
-        throw new Error('GOOGLE_API_KEY is not set.');
+    if (!process.env.GROQ_API_KEY) {
+        throw new Error('GROQ_API_KEY is not set.');
     }
 
-    const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY);
-    const model = genAI.getGenerativeModel({
-        model: 'gemini-flash-latest',
-        systemInstruction: buildSystemPrompt(behaviorProfile),
-        tools: [geminiToolDeclarations],
-        generationConfig: {
-            temperature: 0.4,
-            maxOutputTokens: 1024,
-        },
+    const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+    const systemPrompt = buildSystemPrompt(behaviorProfile);
+
+    // Convert stored history to Groq chat format
+    const messages = [
+        { role: 'system', content: systemPrompt }
+    ];
+
+    historyMessages.slice(-10).forEach(m => {
+        const role = m._getType?.() === 'human' ? 'user' : 'assistant';
+        const text = typeof m.content === 'string' ? m.content : m.content?.[0]?.text || '';
+        if (text) messages.push({ role, content: text });
     });
 
-    // Convert stored history to Gemini chat format
-    // historyMessages come from MongoDBChatMessageHistory as LangChain BaseMessage objects
-    // We extract just role + text content
-    const history = historyMessages
-        .map(m => {
-            const role = m._getType?.() === 'human' ? 'user' : 'model';
-            const text = typeof m.content === 'string' ? m.content : m.content?.[0]?.text || '';
-            if (!text) return null;
-            return { role, parts: [{ text }] };
-        })
-        .filter(Boolean)
-        // Gemini requires alternating user/model turns — filter invalid pairs
-        .reduce((acc, msg) => {
-            if (acc.length === 0) {
-                if (msg.role === 'user') acc.push(msg);
-                return acc;
-            }
-            const last = acc[acc.length - 1];
-            if (last.role !== msg.role) acc.push(msg);
-            return acc;
-        }, [])
-        .slice(-10); // last 5 turns (10 messages)
-
-    const chat = model.startChat({ history });
+    messages.push({ role: 'user', content: userMessage });
 
     // ─── Agentic loop: send message, handle tool calls, repeat ───────────────
     const toolsUsed = [];
     const toolResults = [];
     let finalText = '';
-    let response = await chat.sendMessage(userMessage);
 
     // Loop up to 5 tool rounds (prevents infinite loops)
     for (let round = 0; round < 5; round++) {
-        const candidate = response.response.candidates?.[0];
-        if (!candidate) break;
+        const response = await groq.chat.completions.create({
+            model: 'llama-3.3-70b-versatile',
+            messages: messages,
+            tools: groqToolDeclarations,
+            tool_choice: 'auto',
+            temperature: 0.4,
+            max_tokens: 1024,
+        });
 
-        const parts = candidate.content?.parts || [];
-        const functionCalls = parts.filter(p => p.functionCall);
-        const textParts = parts.filter(p => p.text);
+        const responseMessage = response.choices[0]?.message;
+        if (!responseMessage) break;
 
-        if (functionCalls.length === 0) {
+        // Add the assistant's response to the conversation history
+        messages.push(responseMessage);
+
+        const toolCalls = responseMessage.tool_calls;
+        if (!toolCalls || toolCalls.length === 0) {
             // No more tool calls — we have our final answer
-            finalText = textParts.map(p => p.text).join('');
+            finalText = responseMessage.content || '';
             break;
         }
 
         // Execute all tool calls in parallel
-        const toolResponseParts = await Promise.all(
-            functionCalls.map(async (part) => {
-                const { name, args } = part.functionCall;
+        await Promise.all(
+            toolCalls.map(async (toolCall) => {
+                const name = toolCall.function.name;
                 toolsUsed.push(name);
-                console.log(`[Agent] Calling tool: ${name}`, args);
-                const result = await executeTool(name, args, userId);
-                toolResults.push({ tool: name, content: result });
-                console.log(`[Agent] Tool result (${name}):`, result.slice(0, 100));
-                return {
-                    functionResponse: {
-                        name,
-                        response: { result },
-                    },
-                };
+                console.log(`[Agent] Calling tool: ${name}`, toolCall.function.arguments);
+                
+                const result = await executeTool(name, toolCall.function.arguments, userId);
+                toolResults.push({ tool: name, content: String(result) });
+                console.log(`[Agent] Tool result (${name}):`, String(result).slice(0, 100));
+
+                // Append the tool result to the messages array
+                messages.push({
+                    tool_call_id: toolCall.id,
+                    role: 'tool',
+                    name: name,
+                    content: String(result),
+                });
             })
         );
-
-        // Send tool results back to Gemini
-        response = await chat.sendMessage(toolResponseParts);
     }
 
     // Fallback: extract text if loop ended without explicit text
     if (!finalText) {
-        const parts = response.response.candidates?.[0]?.content?.parts || [];
-        finalText = parts.filter(p => p.text).map(p => p.text).join('') ||
-            "I'm sorry, I couldn't process that request. Please try again.";
+        finalText = "I'm sorry, I couldn't process that request. Please try again.";
     }
 
     // Derive frontend action signal
@@ -152,7 +138,6 @@ export async function runAgent({ userId, userMessage, historyMessages, behaviorP
         action,
         toolsUsed,
         toolResults,
-        // newMessages not needed with direct SDK — we handle history via MongoDB separately
         newMessages: [],
     };
 }
