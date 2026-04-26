@@ -56,7 +56,7 @@ export async function runAgent({ userId, userMessage, historyMessages, behaviorP
 
     const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY);
     const model = genAI.getGenerativeModel({
-        model: 'gemini-1.5-flash',
+        model: 'gemini-flash-latest',
         systemInstruction: buildSystemPrompt(behaviorProfile),
         tools: [geminiToolDeclarations],
         generationConfig: {
